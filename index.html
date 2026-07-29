@@ -1,0 +1,423 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b1020">
+<title>投籃命中率 · HoopStats</title>
+<style>
+  :root{
+    --bg:#0b1020; --card:#151b30; --line:#243052; --ink:#eef2ff;
+    --muted:#93a0c4; --brand:#ff7a2f; --brand2:#ffb066; --good:#37d67a; --bad:#ff5470;
+    --shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+  .wrap{max-width:520px; margin:0 auto; padding:14px 14px 90px;}
+  h1{font-size:20px; margin:6px 2px 14px; letter-spacing:.5px; display:flex; align-items:center; gap:8px}
+  h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--brand);box-shadow:0 0 12px var(--brand)}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow)}
+  .row{display:flex; gap:10px}
+  .row>*{flex:1}
+  label{font-size:13px; color:var(--muted); display:block; margin:0 0 6px 2px}
+  select,input[type=number]{width:100%; padding:12px; border-radius:12px; border:1px solid var(--line);
+    background:#0e1428; color:var(--ink); font-size:16px}
+  button{border:0; border-radius:14px; padding:14px 16px; font-size:16px; font-weight:700; color:#fff;
+    background:var(--brand); box-shadow:var(--shadow); cursor:pointer; transition:transform .05s}
+  button:active{transform:scale(.97)}
+  button.ghost{background:#1b2340; color:var(--ink); border:1px solid var(--line); box-shadow:none}
+  button.good{background:var(--good)} button.bad{background:var(--bad)}
+  .seg{display:flex; gap:8px; background:#0e1428; padding:6px; border-radius:14px; border:1px solid var(--line)}
+  .seg button{flex:1; background:transparent; color:var(--muted); box-shadow:none; padding:10px; font-size:14px}
+  .seg button.on{background:var(--brand); color:#fff}
+
+  /* Camera stage */
+  .stage{position:relative; border-radius:16px; overflow:hidden; background:#000; aspect-ratio:3/4}
+  .stage video,.stage canvas.view{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+  .stage .hud{position:absolute; inset:0; touch-action:none}
+  #zone{position:absolute; border:3px solid var(--brand); border-radius:10px;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.28); background:rgba(255,122,47,.08)}
+  #zone .handle{position:absolute; width:26px;height:26px; right:-13px; bottom:-13px;
+    background:var(--brand); border-radius:50%; border:2px solid #fff}
+  #zone .lbl{position:absolute; top:-26px; left:0; font-size:12px; color:var(--brand2); font-weight:700}
+  .flash{position:absolute; inset:0; background:var(--good); opacity:0; pointer-events:none}
+  .flash.on{animation:fl .5s ease-out}
+  @keyframes fl{from{opacity:.55}to{opacity:0}}
+
+  /* Big stats */
+  .big{display:flex; align-items:baseline; gap:8px; justify-content:center; margin:2px 0}
+  .big .pct{font-size:54px; font-weight:800; letter-spacing:-1px}
+  .big .sub{font-size:15px; color:var(--muted)}
+  .mini{display:flex; gap:10px; text-align:center; margin-top:8px}
+  .mini>div{flex:1; background:#0e1428; border:1px solid var(--line); border-radius:12px; padding:10px 6px}
+  .mini b{display:block; font-size:22px} .mini span{font-size:12px; color:var(--muted)}
+  .progressbar{height:10px; background:#0e1428; border-radius:99px; overflow:hidden; margin-top:12px; border:1px solid var(--line)}
+  .progressbar>i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--brand),var(--brand2))}
+
+  .counter{display:flex; align-items:center; justify-content:center; gap:16px; margin-top:12px}
+  .counter button{width:56px;height:56px;border-radius:50%; font-size:26px; padding:0}
+  .counter .num{font-size:40px; font-weight:800; min-width:70px; text-align:center}
+  .hint{font-size:12px; color:var(--muted); line-height:1.6; margin-top:8px}
+  .slider{width:100%}
+  .toggle{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px}
+  .toggle .t-txt{font-size:14px}
+  .toggle .t-txt small{display:block; color:var(--muted); font-size:12px; margin-top:2px}
+  .sw{position:relative; width:52px; height:30px; flex:none}
+  .sw input{opacity:0; width:0; height:0}
+  .sw i{position:absolute; inset:0; background:#0e1428; border:1px solid var(--line); border-radius:99px; transition:.15s}
+  .sw i:before{content:""; position:absolute; width:22px;height:22px; left:3px; top:3px; background:var(--muted); border-radius:50%; transition:.15s}
+  .sw input:checked+i{background:var(--brand); border-color:var(--brand)}
+  .sw input:checked+i:before{transform:translateX(22px); background:#fff}
+  .tabbar{position:fixed; left:0; right:0; bottom:0; display:flex; background:#0c1224; border-top:1px solid var(--line);
+    padding:8px 8px env(safe-area-inset-bottom); z-index:50}
+  .tabbar button{flex:1; background:transparent; box-shadow:none; color:var(--muted); font-size:13px; padding:8px}
+  .tabbar button.on{color:var(--brand)}
+  .page{display:none} .page.on{display:block}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{padding:9px 6px; border-bottom:1px solid var(--line); text-align:center}
+  th{color:var(--muted); font-weight:600; font-size:12px}
+  .empty{color:var(--muted); text-align:center; padding:26px 0; font-size:14px}
+  .chip{display:inline-block; font-size:12px; padding:3px 9px; border-radius:99px; background:#0e1428; border:1px solid var(--line); color:var(--muted)}
+  .toast{position:fixed; left:50%; bottom:78px; transform:translateX(-50%); background:#000d; color:#fff;
+    padding:10px 16px; border-radius:99px; font-size:14px; opacity:0; transition:opacity .2s; z-index:60}
+  .toast.on{opacity:1}
+  svg text{fill:var(--muted); font-size:10px}
+</style>
+
+<div class="wrap">
+  <h1><span class="dot"></span>投籃命中率 · HoopStats</h1>
+
+  <!-- ========== 練習頁 ========== -->
+  <div class="page on" id="page-train">
+
+    <!-- 設定（未開始時） -->
+    <div class="card" id="setup">
+      <label>投籃距離</label>
+      <div class="seg" id="distSeg">
+        <button data-d="罰球線" class="on">罰球線</button>
+        <button data-d="中距離">中距離</button>
+        <button data-d="三分線">三分線</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>這組投幾球</label>
+          <input type="number" id="ballsPerSet" value="10" min="1" max="200">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="startBtn">開始這一組</button>
+        </div>
+      </div>
+      <div class="toggle">
+        <div class="t-txt">進球特效<small>進球時閃綠光＋手機震動</small></div>
+        <label class="sw"><input type="checkbox" id="fxToggle"><i></i></label>
+      </div>
+      <div class="hint">開始後鏡頭會自動偵測進球。手機放遠拍全景時，記得把橘色偵測框拖到「籃網」那一圈上。</div>
+    </div>
+
+    <!-- 進行中 -->
+    <div class="card" id="live" style="display:none">
+      <div class="stage" id="stage">
+        <video id="video" playsinline muted></video>
+        <canvas class="view" id="view"></canvas>
+        <div class="hud" id="hud">
+          <div id="zone"><span class="lbl">籃框偵測框</span><span class="handle"></span></div>
+        </div>
+        <div class="flash" id="flash"></div>
+      </div>
+
+      <div class="big" style="margin-top:14px">
+        <span class="pct" id="livePct">0%</span>
+        <span class="sub" id="liveFrac">0 / 0</span>
+      </div>
+      <div class="progressbar"><i id="prog"></i></div>
+
+      <div class="counter">
+        <button class="ghost bad" id="minus">−</button>
+        <div class="num" id="madeNum">0</div>
+        <button class="ghost good" id="plus">＋</button>
+      </div>
+      <div class="hint" style="text-align:center">進球數（自動偵測，可用 ＋/− 手動修正）</div>
+
+      <div class="mini">
+        <div><b id="streakNow">0</b><span>目前連中</span></div>
+        <div><b id="streakMax">0</b><span>本組最長連中</span></div>
+        <div><b id="leftNum">0</b><span>剩餘球數</span></div>
+      </div>
+
+      <div style="margin-top:14px">
+        <label>偵測靈敏度（畫面越遠 / 光線越暗，往右調）</label>
+        <input class="slider" type="range" id="sens" min="1" max="20" value="8">
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" id="finishBtn">結束並存檔</button>
+        <button class="ghost" id="cancelBtn" style="flex:.5">取消</button>
+      </div>
+      <div class="hint" id="camHint"></div>
+    </div>
+  </div>
+
+  <!-- ========== 統計頁 ========== -->
+  <div class="page" id="page-stats">
+    <div class="card">
+      <label>總覽</label>
+      <div class="big"><span class="pct" id="allPct">–</span><span class="sub" id="allFrac"></span></div>
+      <div class="mini">
+        <div><b id="allSets">0</b><span>練習組數</span></div>
+        <div><b id="allBest">0</b><span>歷史最長連中</span></div>
+        <div><b id="allShots">0</b><span>總出手數</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <label>各距離命中率</label>
+      <table id="distTable"><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <label>每日命中率趨勢</label>
+      <div id="trend"></div>
+    </div>
+  </div>
+
+  <!-- ========== 紀錄頁 ========== -->
+  <div class="page" id="page-log">
+    <div class="card">
+      <label>練習紀錄</label>
+      <table id="logTable"><thead><tr><th>日期</th><th>距離</th><th>進/投</th><th>命中率</th><th>連中</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="empty" id="logEmpty">還沒有紀錄，去練習頁投第一組吧！</div>
+    </div>
+    <div class="card">
+      <button class="ghost" id="exportBtn">匯出資料（CSV）</button>
+      <button class="ghost" id="clearBtn" style="margin-top:10px;color:var(--bad)">清空所有紀錄</button>
+    </div>
+  </div>
+</div>
+
+<div class="tabbar">
+  <button class="on" data-p="train">🏀 練習</button>
+  <button data-p="stats">📊 統計</button>
+  <button data-p="log">📒 紀錄</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const LS='hoopstats.sessions.v1';
+const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||[]}catch(e){return[]}};
+const save=a=>localStorage.setItem(LS,JSON.stringify(a));
+function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),1600);}
+
+/* ---------- 分頁切換 ---------- */
+$$('.tabbar button').forEach(b=>b.onclick=()=>{
+  $$('.tabbar button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('.page').forEach(p=>p.classList.remove('on'));
+  $('#page-'+b.dataset.p).classList.add('on');
+  if(b.dataset.p==='stats')renderStats();
+  if(b.dataset.p==='log')renderLog();
+});
+
+/* ---------- 設定 ---------- */
+let dist='罰球線';
+$$('#distSeg button').forEach(b=>b.onclick=()=>{
+  $$('#distSeg button').forEach(x=>x.classList.toggle('on',x===b)); dist=b.dataset.d;
+});
+
+/* ---------- 練習狀態 ---------- */
+let ballsPerSet=10, made=0, best=0, streak=0, streakMax=0, running=false;
+function refreshLive(){
+  const total=ballsPerSet;
+  const pct=total?Math.round(made/total*100):0;
+  $('#livePct').textContent=pct+'%';
+  $('#liveFrac').textContent=made+' / '+total;
+  $('#madeNum').textContent=made;
+  $('#streakNow').textContent=streak;
+  $('#streakMax').textContent=streakMax;
+  $('#leftNum').textContent=Math.max(0,total-made);
+  $('#prog').style.width=Math.min(100,pct)+'%';
+}
+// 進球特效開關（預設關閉，記住上次選擇）
+let fx = localStorage.getItem('hoopstats.fx')==='1';
+$('#fxToggle').checked=fx;
+$('#fxToggle').onchange=e=>{ fx=e.target.checked; localStorage.setItem('hoopstats.fx', fx?'1':'0'); };
+
+function addMake(auto){
+  if(!running)return;
+  made++; streak++; streakMax=Math.max(streakMax,streak);
+  refreshLive();
+  if(fx){
+    const f=$('#flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+    if(navigator.vibrate)navigator.vibrate(auto?[30,20,30]:20);
+  }
+  if(made>=ballsPerSet)toast('這組投滿了！可以結束存檔 ✅');
+}
+$('#plus').onclick=()=>addMake(false);
+$('#minus').onclick=()=>{if(made>0){made--; streak=0; refreshLive();}};
+
+/* ---------- 相機 ---------- */
+let stream=null, rafId=null, vwidth=0, vheight=0;
+const video=$('#video'), work=document.createElement('canvas'), wctx=work.getContext('2d',{willReadFrequently:true});
+
+async function startCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject=stream; await video.play();
+    vwidth=video.videoWidth; vheight=video.videoHeight;
+    work.width=Math.round(vwidth*0.4); work.height=Math.round(vheight*0.4); // 縮小加速運算
+    $('#camHint').textContent='鏡頭已開。把橘色框拖到籃網那一圈，右下角圓點可縮放。';
+    detectLoop();
+  }catch(e){
+    $('#camHint').textContent='⚠️ 無法開啟鏡頭：'+e.message+'。請確認用 https 或已允許相機權限；沒有鏡頭時仍可用 ＋/− 手動計分。';
+  }
+}
+function stopCamera(){ if(rafId)cancelAnimationFrame(rafId); rafId=null; if(stream){stream.getTracks().forEach(t=>t.stop()); stream=null;} }
+
+/* 偵測框位置（相對 stage 的百分比） */
+const zone=$('#zone'); let zx=30,zy=18,zw=40,zh=22; // %
+function applyZone(){ zone.style.left=zx+'%'; zone.style.top=zy+'%'; zone.style.width=zw+'%'; zone.style.height=zh+'%'; }
+applyZone();
+
+/* 拖拉 / 縮放偵測框 */
+(function(){
+  const hud=$('#hud'); let mode=null, sx,sy,ox,oy,ow,oh;
+  const rect=()=>hud.getBoundingClientRect();
+  function pt(e){const t=e.touches?e.touches[0]:e; return{x:t.clientX,y:t.clientY};}
+  function down(e){
+    const p=pt(e), r=rect();
+    const onHandle=e.target.classList.contains('handle');
+    mode=onHandle?'resize':'move'; sx=p.x; sy=p.y; ox=zx; oy=zy; ow=zw; oh=zh;
+    e.preventDefault();
+  }
+  function move(e){
+    if(!mode)return; const p=pt(e), r=rect();
+    const dx=(p.x-sx)/r.width*100, dy=(p.y-sy)/r.height*100;
+    if(mode==='move'){ zx=Math.min(100-zw,Math.max(0,ox+dx)); zy=Math.min(100-zh,Math.max(0,oy+dy)); }
+    else{ zw=Math.min(100-zx,Math.max(10,ow+dx)); zh=Math.min(100-zy,Math.max(8,oh+dy)); }
+    applyZone(); e.preventDefault();
+  }
+  function up(){mode=null;}
+  zone.addEventListener('mousedown',down); zone.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
+})();
+
+/* 偵測演算法：橘色球「由上往下」穿過偵測框 → 記一次進球
+   狀態機：等待 → 球進框(上半) → 球到框下半 → 離開 → 觸發 make（含冷卻） */
+let sens=8, phase='idle', cooldown=0;
+$('#sens').oninput=e=>sens=+e.target.value;
+function detectLoop(){
+  rafId=requestAnimationFrame(detectLoop);
+  if(!running||video.readyState<2)return;
+  const W=work.width,H=work.height;
+  wctx.drawImage(video,0,0,W,H);
+  // 偵測框映射到縮小畫布
+  const x0=Math.floor(zx/100*W), y0=Math.floor(zy/100*H);
+  const x1=Math.ceil((zx+zw)/100*W), y1=Math.ceil((zy+zh)/100*H);
+  let img; try{img=wctx.getImageData(x0,y0,x1-x0,y1-y0);}catch(e){return;}
+  const d=img.data, zW=x1-x0, zH=y1-y0;
+  let count=0, sumY=0;
+  for(let py=0;py<zH;py++){
+    for(let px=0;px<zW;px++){
+      const i=(py*zW+px)*4, r=d[i],g=d[i+1],b=d[i+2];
+      // 籃球橘：R 明顯大於 B，R>=G>=B，且夠亮
+      if(r>110 && r-b>45 && r>=g && g>=b-10 && r+g+b>140){ count++; sumY+=py; }
+    }
+  }
+  const area=zW*zH;
+  const thresh=area*(sens/1000)+4;        // 靈敏度：需要多少橘色像素才算「有球」
+  const present=count>thresh;
+  const cy=count?sumY/count:0;            // 橘色重心在框內的相對高度
+  if(cooldown>0)cooldown--;
+
+  if(phase==='idle'){ if(present && cy<zH*0.55) phase='enter'; }
+  else if(phase==='enter'){
+    if(!present){ phase='idle'; }             // 球又不見了，重來
+    else if(cy>zH*0.55) phase='through';      // 球移動到框下半 → 判定穿過
+  }
+  else if(phase==='through'){
+    if(!present){                             // 球離開框下緣 → 進球！
+      if(cooldown===0){ addMake(true); cooldown=45; } // ~0.75s 冷卻防重複
+      phase='idle';
+    }
+  }
+}
+
+/* ---------- 開始 / 結束 ---------- */
+$('#startBtn').onclick=()=>{
+  ballsPerSet=Math.max(1,+$('#ballsPerSet').value||10);
+  made=0; streak=0; streakMax=0; running=true; phase='idle'; cooldown=0;
+  $('#setup').style.display='none'; $('#live').style.display='block';
+  refreshLive(); startCamera();
+};
+function endSession(store){
+  running=false; stopCamera();
+  if(store && made>=0){
+    const s=load();
+    s.push({t:Date.now(), date:new Date().toISOString().slice(0,10),
+      dist, made, total:ballsPerSet, streak:streakMax});
+    save(s); toast('已存檔 ✅');
+  }
+  $('#live').style.display='none'; $('#setup').style.display='block';
+}
+$('#finishBtn').onclick=()=>endSession(true);
+$('#cancelBtn').onclick=()=>{ if(confirm('取消這一組？不會存檔。'))endSession(false); };
+
+/* ---------- 統計 ---------- */
+function renderStats(){
+  const s=load();
+  let m=0,t=0,best=0;
+  const byDist={};
+  s.forEach(x=>{ m+=x.made; t+=x.total; best=Math.max(best,x.streak||0);
+    const k=x.dist||'未分類'; byDist[k]=byDist[k]||{m:0,t:0}; byDist[k].m+=x.made; byDist[k].t+=x.total; });
+  $('#allPct').textContent=t?Math.round(m/t*100)+'%':'–';
+  $('#allFrac').textContent=t?`${m} / ${t}`:'';
+  $('#allSets').textContent=s.length; $('#allBest').textContent=best; $('#allShots').textContent=t;
+  const tb=$('#distTable tbody'); tb.innerHTML='';
+  const order=['罰球線','中距離','三分線'];
+  Object.keys(byDist).sort((a,b)=>order.indexOf(a)-order.indexOf(b)).forEach(k=>{
+    const {m,t}=byDist[k]; const p=t?Math.round(m/t*100):0;
+    tb.innerHTML+=`<tr><td style="text-align:left"><span class="chip">${k}</span></td><td>${m}/${t}</td><td><b>${p}%</b></td></tr>`;
+  });
+  if(!s.length)tb.innerHTML='<tr><td class="empty" colspan="3">還沒有資料</td></tr>';
+  renderTrend(s);
+}
+function renderTrend(s){
+  const box=$('#trend'); const byDay={};
+  s.forEach(x=>{ byDay[x.date]=byDay[x.date]||{m:0,t:0}; byDay[x.date].m+=x.made; byDay[x.date].t+=x.total; });
+  const days=Object.keys(byDay).sort().slice(-14);
+  if(!days.length){box.innerHTML='<div class="empty">還沒有資料</div>';return;}
+  const W=460,H=150,pad=26;
+  const pts=days.map((d,i)=>{ const p=byDay[d].t?byDay[d].m/byDay[d].t:0;
+    return{x:pad+i*((W-pad*2)/Math.max(1,days.length-1)), y:H-20-p*(H-40), p:Math.round(p*100), d}; });
+  let path=pts.map((q,i)=>(i?'L':'M')+q.x.toFixed(1)+' '+q.y.toFixed(1)).join(' ');
+  let dots=pts.map(q=>`<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="3.5" fill="#ff7a2f"/>
+    <text x="${q.x.toFixed(1)}" y="${(q.y-8).toFixed(1)}" text-anchor="middle" fill="#ffb066">${q.p}</text>`).join('');
+  let xlab=pts.map((q,i)=> (days.length<=8||i%2===0)?`<text x="${q.x.toFixed(1)}" y="${H-4}" text-anchor="middle">${q.d.slice(5)}</text>`:'').join('');
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%">
+    <line x1="${pad}" y1="${H-20}" x2="${W-pad}" y2="${H-20}" stroke="#243052"/>
+    <path d="${path}" fill="none" stroke="#ff7a2f" stroke-width="2.5" stroke-linejoin="round"/>
+    ${dots}${xlab}</svg>`;
+}
+
+/* ---------- 紀錄 ---------- */
+function renderLog(){
+  const s=load().slice().reverse(); const tb=$('#logTable tbody'); tb.innerHTML='';
+  $('#logEmpty').style.display=s.length?'none':'block';
+  s.forEach(x=>{ const p=x.total?Math.round(x.made/x.total*100):0;
+    tb.innerHTML+=`<tr><td>${x.date.slice(5)}</td><td><span class="chip">${x.dist}</span></td>
+      <td>${x.made}/${x.total}</td><td><b>${p}%</b></td><td>${x.streak||0}</td>
+      <td><button class="ghost" style="padding:6px 10px;font-size:12px" onclick="delRow(${x.t})">刪</button></td></tr>`;
+  });
+}
+window.delRow=t=>{ if(!confirm('刪除這筆紀錄？'))return; save(load().filter(x=>x.t!==t)); renderLog(); };
+$('#clearBtn').onclick=()=>{ if(confirm('確定清空所有練習紀錄？無法復原。')){save([]); renderLog(); renderStats(); toast('已清空');} };
+$('#exportBtn').onclick=()=>{
+  const s=load(); if(!s.length){toast('沒有資料可匯出');return;}
+  const rows=[['日期','距離','進球','出手','命中率%','最長連中']];
+  s.forEach(x=>rows.push([x.date,x.dist,x.made,x.total, x.total?Math.round(x.made/x.total*100):0, x.streak||0]));
+  const csv='﻿'+rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='hoopstats.csv'; a.click(); toast('已匯出 CSV');
+};
+
+refreshLive();
+</script>

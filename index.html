@@ -127,7 +127,7 @@
         <div class="t-txt">進球特效<small>進球時閃綠光＋手機震動</small></div>
         <label class="sw"><input type="checkbox" id="fxToggle"><i></i></label>
       </div>
-      <div class="hint">開始後：① 用「放大」把籃框拉大 ② 點畫面上的籃框、讓橘框框住籃網 ③ 投一球看下面的偵測條有沒有衝過紅線，沒衝過就把「靈敏度」往右調。</div>
+      <div class="hint">開始後：① 用「放大」把籃框拉大 ② 點畫面上的籃框、讓橘框框住籃框那一圈 ③ 投球時畫面會用綠圈標出偵測到的球；球從上方掉進框內才算進。抓不到球就把「靈敏度」往右調。</div>
     </div>
 
     <div class="card" id="live" style="display:none">
@@ -137,7 +137,7 @@
         <div class="hud" id="hud">
           <div id="zone"><span class="lbl">籃框偵測框</span><span class="cross"></span><span class="handle"></span></div>
         </div>
-        <div class="tag" id="tag">點畫面移動框</div>
+        <div class="tag" id="tag">點畫面移動框 · 綠圈=偵測到球</div>
         <div class="flash" id="flash"></div>
       </div>
 
@@ -150,7 +150,7 @@
       <!-- 偵測強度條 -->
       <div class="meterwrap">
         <div class="meter"><i id="meterFill"></i><div class="thr" id="meterThr"></div></div>
-        <div class="meterhint">偵測強度（進球時應該衝過<span style="color:var(--bad)">紅線</span>）。太容易亂跳→靈敏度往左；投進沒反應→往右。</div>
+        <div class="meterhint">抓球強度（有看到球時會亮起、超過<span style="color:var(--bad)">紅線</span>代表抓得到）。抓不到球→靈敏度往右；把不是球的橘色也當成球→往左。</div>
       </div>
       <div class="ctrl">
         <label>靈敏度　<span class="val" id="sensVal">中</span></label>
@@ -291,7 +291,7 @@ async function startCamera(){
     video.srcObject=stream; await video.play();
     vw=video.videoWidth; vh=video.videoHeight;
     $('#camHint').textContent='';
-    prevData=null; loop();
+    ballY=null; armed=0; cooldown=0; loop();
   }catch(e){
     $('#camHint').textContent='⚠️ 無法開啟鏡頭：'+e.message+'。請用 https 開啟並允許相機權限；沒有鏡頭時仍可用 ＋/− 手動計分。';
   }
@@ -333,51 +333,68 @@ applyZone();
   window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
 })();
 
-/* 主迴圈：畫（含數位放大的）畫面 → 偵測框內做「畫面變化量」偵測 */
-let prevData=null, prevKey='', wasOver=false, cooldown=0;
+/* 主迴圈：畫（含數位放大的）畫面 → 全畫面追蹤橘色球 → 球從上方掉進籃框才算進
+   這比「偵測晃動」準：要求(1)真的有橘色球狀物 (2)位置在籃框那圈 (3)由上往下移動
+   —— 走人、風吹網子、橫向移動都不會誤觸。 */
+let cooldown=0, armed=0, ballY=null, lastCount=0;
 function loop(){
   rafId=requestAnimationFrame(loop);
   if(!running||video.readyState<2||!vw)return;
 
-  // 以「cover」方式把 3:4 的來源區塊畫進 360×480；zoom 縮小來源區塊 = 放大畫面
+  // 以「cover」方式把 3:4 來源畫進 360×480；zoom 縮小來源 = 放大畫面
   let bw,bh;
   if(vw/vh>0.75){ bh=vh; bw=bh*0.75; } else { bw=vw; bh=bw/0.75; }
   const cw=bw/zoom, ch=bh/zoom, cx=(vw-cw)/2, cy=(vh-ch)/2;
   vctx.drawImage(video, cx,cy,cw,ch, 0,0,VW,VH);
 
-  // 偵測框對應到畫布像素
-  const x0=Math.round(zx/100*VW), y0=Math.round(zy/100*VH);
-  const w=Math.max(1,Math.round(zw/100*VW)), h=Math.max(1,Math.round(zh/100*VH));
-  let cur; try{ cur=vctx.getImageData(x0,y0,w,h); }catch(e){ return; }
-  const key=w+'x'+h;
-
-  let motion=0;
-  if(prevData && prevKey===key){
-    const a=cur.data, b=prevData.data; let changed=0; const n=a.length;
-    for(let i=0;i<n;i+=4){
-      const d=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
-      if(d>60) changed++;
+  // 全畫面掃描橘色球（step 2 加速），取重心與數量
+  let img; try{ img=vctx.getImageData(0,0,VW,VH); }catch(e){ return; }
+  const d=img.data; let sx=0,sy=0,cnt=0;
+  for(let y=0;y<VH;y+=2){
+    const row=y*VW;
+    for(let x=0;x<VW;x+=2){
+      const i=(row+x)*4, r=d[i],g=d[i+1],b=d[i+2];
+      // 籃球橘：紅為最強、明顯大於藍、夠亮
+      if(r>110 && r-b>50 && r>=g && g>b-25){ sx+=x; sy+=y; cnt++; }
     }
-    motion=changed/(n/4);              // 0..1：框內有多少比例的像素在動
   }
-  prevData=cur; prevKey=key;
+  // 靈敏度 → 需要多少橘色點才算「看到球」（右邊=高靈敏=門檻低）
+  const minCount=Math.max(3, Math.round((21-sens)*4));
+  const present=cnt>=minCount;
+  const bx=present?sx/cnt:0, by=present?sy/cnt:0;
+  lastCount=cnt;
 
-  // 靈敏度 → 門檻（右邊=高靈敏=低門檻）
-  const thr=0.30-(sens-1)*(0.28/19);   // sens1≈0.30, sens20≈0.02
-  const scale=0.45;                     // 顯示縮放
-  $('#meterFill').style.width=Math.min(100,motion/scale*100)+'%';
-  $('#meterThr').style.left=Math.min(100,thr/scale*100)+'%';
+  // 抓球強度條：到門檻=50%，越多越滿；紅線固定 50%
+  $('#meterFill').style.width=Math.min(100, cnt/(minCount*2)*100)+'%';
+  $('#meterThr').style.left='50%';
+
+  // 籃框範圍（畫布像素）
+  const rx0=zx/100*VW, ry0=zy/100*VH, rx1=(zx+zw)/100*VW, ry1=(zy+zh)/100*VH;
+  const mX=(rx1-rx0)*0.6;                       // 上方對準的水平容許
 
   if(cooldown>0)cooldown--;
-  const over=motion>thr;
-  if(over && !wasOver && cooldown===0){ addMake(true); cooldown=25; } // 上升沿觸發＋冷卻
-  wasOver=over;
+  if(present){
+    const vy=(ballY!=null)?(by-ballY):0;        // 垂直速度：>0 代表往下
+    const aboveRim = by<ry0 && bx>rx0-mX && bx<rx1+mX;
+    const inRim = bx>=rx0 && bx<=rx1 && by>=ry0 && by<=ry1;
+    if(aboveRim) armed=18;                       // 球出現在框上方 → 武裝（約 0.3s 內有效）
+    if(armed>0 && inRim && vy>0 && cooldown===0){ addMake(true); cooldown=30; armed=0; }
+    ballY=by;
+  }else{ ballY=null; }
+  if(armed>0)armed--;
+
+  // 在畫面上畫出偵測到的球（綠=已武裝、橘=偵測到）
+  vctx.beginPath();
+  if(present){
+    vctx.arc(bx,by, Math.max(6,Math.sqrt(cnt)*1.4), 0, 7);
+    vctx.lineWidth=3; vctx.strokeStyle=armed>0?'#37d67a':'#ff7a2f'; vctx.stroke();
+  }
 }
 
 /* ---------- 開始 / 結束 ---------- */
 $('#startBtn').onclick=()=>{
   ballsPerSet=Math.max(1,+$('#ballsPerSet').value||10);
-  made=0; streak=0; streakMax=0; running=true; wasOver=false; cooldown=0; prevData=null;
+  made=0; streak=0; streakMax=0; running=true; armed=0; cooldown=0; ballY=null;
   $('#setup').style.display='none'; $('#live').style.display='block';
   refreshLive(); startCamera();
 };

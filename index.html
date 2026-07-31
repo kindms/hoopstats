@@ -127,7 +127,7 @@
         <div class="t-txt">進球特效<small>進球時閃綠光＋手機震動</small></div>
         <label class="sw"><input type="checkbox" id="fxToggle"><i></i></label>
       </div>
-      <div class="hint">開始後：① 用「放大」把籃框拉大 ② 點畫面上的籃框、讓橘框框住籃框那一圈 ③ 投球時畫面會用綠圈標出偵測到的球；球從上方掉進框內才算進。抓不到球就把「靈敏度」往右調。</div>
+      <div class="hint">開始後：① 用「放大」把籃框拉大 ② 點畫面上的籃框、讓橘框框住籃框那一圈 ③ <b>球不是橘色沒關係</b>：按「校正球色」再點一下你的球，它就記住那顏色 ④ 投球時畫面會用綠圈標出偵測到的球；球從上方掉進框內才算進。抓不到球就把「靈敏度」往右調。</div>
     </div>
 
     <div class="card" id="live" style="display:none">
@@ -145,6 +145,12 @@
       <div class="ctrl">
         <label>放大籃框　<span class="val" id="zoomVal">1.0×</span></label>
         <input class="slider" type="range" id="zoom" min="10" max="40" value="10">
+      </div>
+
+      <!-- 校正球色 -->
+      <div class="ctrl" style="display:flex; align-items:center; gap:10px">
+        <button class="ghost" id="calBtn" style="flex:1">🎯 校正球色（點一下你的球）</button>
+        <span id="swatch" title="目前偵測的球色。點色塊可重設為預設橘色" style="width:38px;height:38px;border-radius:9px;border:2px solid #fff;flex:none;background:#ff7a2f"></span>
       </div>
 
       <!-- 偵測強度條 -->
@@ -285,6 +291,29 @@ $('#zoom').oninput=e=>{ zoom=e.target.value/10; $('#zoomVal').textContent=zoom.t
 let sens=10;
 $('#sens').oninput=e=>{ sens=+e.target.value; $('#sensVal').textContent=sens<=7?'低':sens>=15?'高':'中'; };
 
+/* 球色校正：點一下球記住它的顏色，之後認那個顏色（不再限定橘色） */
+let ballColor=null; try{ ballColor=JSON.parse(localStorage.getItem('hoopstats.ballcolor')||'null'); }catch(e){}
+let sampling=false;
+function updateSwatch(){ $('#swatch').style.background = ballColor?`rgb(${ballColor.r},${ballColor.g},${ballColor.b})`:'#ff7a2f'; }
+updateSwatch();
+function isBall(r,g,b){
+  if(ballColor){ const tol=60+sens*6; return Math.abs(r-ballColor.r)+Math.abs(g-ballColor.g)+Math.abs(b-ballColor.b) < tol; }
+  return r>110 && r-b>50 && r>=g && g>b-25;      // 沒校正時的預設橘色球
+}
+function sampleColorAt(clientX,clientY){
+  const rc=$('#hud').getBoundingClientRect();
+  const px=Math.round((clientX-rc.left)/rc.width*VW), py=Math.round((clientY-rc.top)/rc.height*VH);
+  const s=6; let R=0,G=0,B=0,n=0;
+  try{ const im=vctx.getImageData(Math.max(0,px-s),Math.max(0,py-s),s*2,s*2); const d=im.data;
+    for(let i=0;i<d.length;i+=4){ R+=d[i]; G+=d[i+1]; B+=d[i+2]; n++; } }catch(e){ toast('校正失敗，再試一次'); return; }
+  if(!n)return;
+  ballColor={r:Math.round(R/n),g:Math.round(G/n),b:Math.round(B/n)};
+  localStorage.setItem('hoopstats.ballcolor',JSON.stringify(ballColor));
+  updateSwatch(); $('#tag').textContent='點畫面移動框 · 綠圈=偵測到球'; toast('已記住球的顏色 🎯');
+}
+$('#calBtn').onclick=()=>{ sampling=true; $('#tag').textContent='👉 現在點畫面上的「球」'; toast('請點一下畫面上的球'); };
+$('#swatch').onclick=()=>{ ballColor=null; localStorage.removeItem('hoopstats.ballcolor'); updateSwatch(); toast('已重設為預設橘色球'); };
+
 async function startCamera(){
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
@@ -314,6 +343,7 @@ applyZone();
   }
   function down(e){
     const p=pt(e);
+    if(sampling){ sampleColorAt(p.x,p.y); sampling=false; e.preventDefault(); return; } // 校正模式：點球取色，不移動框
     if(e.target.classList.contains('handle')){ mode='resize'; sx=p.x; sy=p.y; ow=zw; oh=zh; }
     else{ mode='move'; centerTo(p.x,p.y); }
     e.preventDefault();
@@ -353,9 +383,9 @@ function loop(){
   for(let y=0;y<VH;y+=2){
     const row=y*VW;
     for(let x=0;x<VW;x+=2){
-      const i=(row+x)*4, r=d[i],g=d[i+1],b=d[i+2];
-      // 籃球橘：紅為最強、明顯大於藍、夠亮
-      if(r>110 && r-b>50 && r>=g && g>b-25){ sx+=x; sy+=y; cnt++; }
+      const i=(row+x)*4;
+      // 認球：有校正過就比對記住的顏色，否則用預設橘色規則
+      if(isBall(d[i],d[i+1],d[i+2])){ sx+=x; sy+=y; cnt++; }
     }
   }
   // 靈敏度 → 需要多少橘色點才算「看到球」（右邊=高靈敏=門檻低）

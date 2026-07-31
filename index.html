@@ -34,18 +34,30 @@
 
   /* Camera stage */
   .stage{position:relative; border-radius:16px; overflow:hidden; background:#000; aspect-ratio:3/4}
-  .stage video,.stage canvas.view{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
-  .stage .hud{position:absolute; inset:0; touch-action:none}
-  #zone{position:absolute; border:3px solid var(--brand); border-radius:10px;
-    box-shadow:0 0 0 9999px rgba(0,0,0,.28); background:rgba(255,122,47,.08)}
-  #zone .handle{position:absolute; width:26px;height:26px; right:-13px; bottom:-13px;
-    background:var(--brand); border-radius:50%; border:2px solid #fff}
-  #zone .lbl{position:absolute; top:-26px; left:0; font-size:12px; color:var(--brand2); font-weight:700}
+  .stage video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0}
+  .stage canvas.view{position:absolute; inset:0; width:100%; height:100%}
+  .stage .hud{position:absolute; inset:0; touch-action:none; cursor:crosshair}
+  #zone{position:absolute; border:3px solid var(--brand); border-radius:8px;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.30); background:rgba(255,122,47,.06); pointer-events:none}
+  #zone .cross{position:absolute; left:50%; top:50%; width:16px; height:16px; transform:translate(-50%,-50%)}
+  #zone .cross:before,#zone .cross:after{content:""; position:absolute; background:var(--brand2)}
+  #zone .cross:before{left:50%; top:0; width:2px; height:100%; transform:translateX(-50%)}
+  #zone .cross:after{top:50%; left:0; height:2px; width:100%; transform:translateY(-50%)}
+  #zone .handle{position:absolute; width:30px;height:30px; right:-15px; bottom:-15px; pointer-events:auto;
+    background:var(--brand); border-radius:50%; border:2px solid #fff; touch-action:none}
+  #zone .lbl{position:absolute; top:-24px; left:0; font-size:12px; color:var(--brand2); font-weight:700; white-space:nowrap}
   .flash{position:absolute; inset:0; background:var(--good); opacity:0; pointer-events:none}
   .flash.on{animation:fl .5s ease-out}
   @keyframes fl{from{opacity:.55}to{opacity:0}}
+  .tag{position:absolute; left:8px; top:8px; background:#000a; color:#fff; font-size:12px; padding:5px 9px; border-radius:8px}
 
-  /* Big stats */
+  /* 偵測強度條 */
+  .meterwrap{margin-top:12px}
+  .meter{position:relative; height:16px; background:#0e1428; border:1px solid var(--line); border-radius:99px; overflow:hidden}
+  .meter>i{position:absolute; left:0; top:0; bottom:0; width:0; background:linear-gradient(90deg,var(--good),var(--brand2)); transition:width .05s}
+  .meter>.thr{position:absolute; top:-3px; bottom:-3px; width:3px; background:var(--bad); border-radius:2px}
+  .meterhint{font-size:12px; color:var(--muted); margin-top:6px}
+
   .big{display:flex; align-items:baseline; gap:8px; justify-content:center; margin:2px 0}
   .big .pct{font-size:54px; font-weight:800; letter-spacing:-1px}
   .big .sub{font-size:15px; color:var(--muted)}
@@ -56,10 +68,12 @@
   .progressbar>i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--brand),var(--brand2))}
 
   .counter{display:flex; align-items:center; justify-content:center; gap:16px; margin-top:12px}
-  .counter button{width:56px;height:56px;border-radius:50%; font-size:26px; padding:0}
+  .counter button{width:60px;height:60px;border-radius:50%; font-size:28px; padding:0}
   .counter .num{font-size:40px; font-weight:800; min-width:70px; text-align:center}
   .hint{font-size:12px; color:var(--muted); line-height:1.6; margin-top:8px}
   .slider{width:100%}
+  .ctrl{margin-top:12px}
+  .ctrl .val{color:var(--brand2); font-weight:700}
   .toggle{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px}
   .toggle .t-txt{font-size:14px}
   .toggle .t-txt small{display:block; color:var(--muted); font-size:12px; margin-top:2px}
@@ -69,6 +83,7 @@
   .sw i:before{content:""; position:absolute; width:22px;height:22px; left:3px; top:3px; background:var(--muted); border-radius:50%; transition:.15s}
   .sw input:checked+i{background:var(--brand); border-color:var(--brand)}
   .sw input:checked+i:before{transform:translateX(22px); background:#fff}
+
   .tabbar{position:fixed; left:0; right:0; bottom:0; display:flex; background:#0c1224; border-top:1px solid var(--line);
     padding:8px 8px env(safe-area-inset-bottom); z-index:50}
   .tabbar button{flex:1; background:transparent; box-shadow:none; color:var(--muted); font-size:13px; padding:8px}
@@ -91,7 +106,6 @@
   <!-- ========== 練習頁 ========== -->
   <div class="page on" id="page-train">
 
-    <!-- 設定（未開始時） -->
     <div class="card" id="setup">
       <label>投籃距離</label>
       <div class="seg" id="distSeg">
@@ -113,18 +127,34 @@
         <div class="t-txt">進球特效<small>進球時閃綠光＋手機震動</small></div>
         <label class="sw"><input type="checkbox" id="fxToggle"><i></i></label>
       </div>
-      <div class="hint">開始後鏡頭會自動偵測進球。手機放遠拍全景時，記得把橘色偵測框拖到「籃網」那一圈上。</div>
+      <div class="hint">開始後：① 用「放大」把籃框拉大 ② 點畫面上的籃框、讓橘框框住籃網 ③ 投一球看下面的偵測條有沒有衝過紅線，沒衝過就把「靈敏度」往右調。</div>
     </div>
 
-    <!-- 進行中 -->
     <div class="card" id="live" style="display:none">
       <div class="stage" id="stage">
         <video id="video" playsinline muted></video>
-        <canvas class="view" id="view"></canvas>
+        <canvas class="view" id="view" width="360" height="480"></canvas>
         <div class="hud" id="hud">
-          <div id="zone"><span class="lbl">籃框偵測框</span><span class="handle"></span></div>
+          <div id="zone"><span class="lbl">籃框偵測框</span><span class="cross"></span><span class="handle"></span></div>
         </div>
+        <div class="tag" id="tag">點畫面移動框</div>
         <div class="flash" id="flash"></div>
+      </div>
+
+      <!-- 放大 -->
+      <div class="ctrl">
+        <label>放大籃框　<span class="val" id="zoomVal">1.0×</span></label>
+        <input class="slider" type="range" id="zoom" min="10" max="40" value="10">
+      </div>
+
+      <!-- 偵測強度條 -->
+      <div class="meterwrap">
+        <div class="meter"><i id="meterFill"></i><div class="thr" id="meterThr"></div></div>
+        <div class="meterhint">偵測強度（進球時應該衝過<span style="color:var(--bad)">紅線</span>）。太容易亂跳→靈敏度往左；投進沒反應→往右。</div>
+      </div>
+      <div class="ctrl">
+        <label>靈敏度　<span class="val" id="sensVal">中</span></label>
+        <input class="slider" type="range" id="sens" min="1" max="20" value="10">
       </div>
 
       <div class="big" style="margin-top:14px">
@@ -146,11 +176,7 @@
         <div><b id="leftNum">0</b><span>剩餘球數</span></div>
       </div>
 
-      <div style="margin-top:14px">
-        <label>偵測靈敏度（畫面越遠 / 光線越暗，往右調）</label>
-        <input class="slider" type="range" id="sens" min="1" max="20" value="8">
-      </div>
-      <div class="row" style="margin-top:12px">
+      <div class="row" style="margin-top:14px">
         <button class="ghost" id="finishBtn">結束並存檔</button>
         <button class="ghost" id="cancelBtn" style="flex:.5">取消</button>
       </div>
@@ -207,7 +233,7 @@ const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||[]}catch(e){ret
 const save=a=>localStorage.setItem(LS,JSON.stringify(a));
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),1600);}
 
-/* ---------- 分頁切換 ---------- */
+/* ---------- 分頁 ---------- */
 $$('.tabbar button').forEach(b=>b.onclick=()=>{
   $$('.tabbar button').forEach(x=>x.classList.toggle('on',x===b));
   $$('.page').forEach(p=>p.classList.remove('on'));
@@ -221,12 +247,14 @@ let dist='罰球線';
 $$('#distSeg button').forEach(b=>b.onclick=()=>{
   $$('#distSeg button').forEach(x=>x.classList.toggle('on',x===b)); dist=b.dataset.d;
 });
+let fx=localStorage.getItem('hoopstats.fx')==='1';
+$('#fxToggle').checked=fx;
+$('#fxToggle').onchange=e=>{fx=e.target.checked; localStorage.setItem('hoopstats.fx',fx?'1':'0');};
 
 /* ---------- 練習狀態 ---------- */
-let ballsPerSet=10, made=0, best=0, streak=0, streakMax=0, running=false;
+let ballsPerSet=10, made=0, streak=0, streakMax=0, running=false;
 function refreshLive(){
-  const total=ballsPerSet;
-  const pct=total?Math.round(made/total*100):0;
+  const total=ballsPerSet, pct=total?Math.round(made/total*100):0;
   $('#livePct').textContent=pct+'%';
   $('#liveFrac').textContent=made+' / '+total;
   $('#madeNum').textContent=made;
@@ -235,15 +263,9 @@ function refreshLive(){
   $('#leftNum').textContent=Math.max(0,total-made);
   $('#prog').style.width=Math.min(100,pct)+'%';
 }
-// 進球特效開關（預設關閉，記住上次選擇）
-let fx = localStorage.getItem('hoopstats.fx')==='1';
-$('#fxToggle').checked=fx;
-$('#fxToggle').onchange=e=>{ fx=e.target.checked; localStorage.setItem('hoopstats.fx', fx?'1':'0'); };
-
 function addMake(auto){
   if(!running)return;
-  made++; streak++; streakMax=Math.max(streakMax,streak);
-  refreshLive();
+  made++; streak++; streakMax=Math.max(streakMax,streak); refreshLive();
   if(fx){
     const f=$('#flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
     if(navigator.vibrate)navigator.vibrate(auto?[30,20,30]:20);
@@ -254,106 +276,116 @@ $('#plus').onclick=()=>addMake(false);
 $('#minus').onclick=()=>{if(made>0){made--; streak=0; refreshLive();}};
 
 /* ---------- 相機 ---------- */
-let stream=null, rafId=null, vwidth=0, vheight=0;
-const video=$('#video'), work=document.createElement('canvas'), wctx=work.getContext('2d',{willReadFrequently:true});
+let stream=null, rafId=null, vw=0, vh=0;
+const video=$('#video');
+const view=$('#view'), vctx=view.getContext('2d',{willReadFrequently:true});
+const VW=360, VH=480;                 // 偵測畫布固定解析度（3:4）
+let zoom=1;                            // 數位放大 1.0–4.0
+$('#zoom').oninput=e=>{ zoom=e.target.value/10; $('#zoomVal').textContent=zoom.toFixed(1)+'×'; };
+let sens=10;
+$('#sens').oninput=e=>{ sens=+e.target.value; $('#sensVal').textContent=sens<=7?'低':sens>=15?'高':'中'; };
 
 async function startCamera(){
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
     video.srcObject=stream; await video.play();
-    vwidth=video.videoWidth; vheight=video.videoHeight;
-    work.width=Math.round(vwidth*0.4); work.height=Math.round(vheight*0.4); // 縮小加速運算
-    $('#camHint').textContent='鏡頭已開。把橘色框拖到籃網那一圈，右下角圓點可縮放。';
-    detectLoop();
+    vw=video.videoWidth; vh=video.videoHeight;
+    $('#camHint').textContent='';
+    prevData=null; loop();
   }catch(e){
-    $('#camHint').textContent='⚠️ 無法開啟鏡頭：'+e.message+'。請確認用 https 或已允許相機權限；沒有鏡頭時仍可用 ＋/− 手動計分。';
+    $('#camHint').textContent='⚠️ 無法開啟鏡頭：'+e.message+'。請用 https 開啟並允許相機權限；沒有鏡頭時仍可用 ＋/− 手動計分。';
   }
 }
 function stopCamera(){ if(rafId)cancelAnimationFrame(rafId); rafId=null; if(stream){stream.getTracks().forEach(t=>t.stop()); stream=null;} }
 
-/* 偵測框位置（相對 stage 的百分比） */
-const zone=$('#zone'); let zx=30,zy=18,zw=40,zh=22; // %
+/* 偵測框位置（% of stage/canvas，兩者對齊） */
+const zone=$('#zone'); let zx=40,zy=26,zw=20,zh=16; // 預設較小
 function applyZone(){ zone.style.left=zx+'%'; zone.style.top=zy+'%'; zone.style.width=zw+'%'; zone.style.height=zh+'%'; }
 applyZone();
 
-/* 拖拉 / 縮放偵測框 */
+/* 手指操作：點/拖 hud 任意處→移動框中心；拖右下圓點→縮放 */
 (function(){
-  const hud=$('#hud'); let mode=null, sx,sy,ox,oy,ow,oh;
+  const hud=$('#hud'); let mode=null, sx,sy,ow,oh;
   const rect=()=>hud.getBoundingClientRect();
-  function pt(e){const t=e.touches?e.touches[0]:e; return{x:t.clientX,y:t.clientY};}
+  const pt=e=>{const t=e.touches?e.touches[0]:e; return{x:t.clientX,y:t.clientY};};
+  function centerTo(px,py){ const r=rect();
+    let cx=(px-r.left)/r.width*100, cy=(py-r.top)/r.height*100;
+    zx=Math.min(100-zw,Math.max(0,cx-zw/2)); zy=Math.min(100-zh,Math.max(0,cy-zh/2)); applyZone();
+  }
   function down(e){
-    const p=pt(e), r=rect();
-    const onHandle=e.target.classList.contains('handle');
-    mode=onHandle?'resize':'move'; sx=p.x; sy=p.y; ox=zx; oy=zy; ow=zw; oh=zh;
+    const p=pt(e);
+    if(e.target.classList.contains('handle')){ mode='resize'; sx=p.x; sy=p.y; ow=zw; oh=zh; }
+    else{ mode='move'; centerTo(p.x,p.y); }
     e.preventDefault();
   }
   function move(e){
     if(!mode)return; const p=pt(e), r=rect();
-    const dx=(p.x-sx)/r.width*100, dy=(p.y-sy)/r.height*100;
-    if(mode==='move'){ zx=Math.min(100-zw,Math.max(0,ox+dx)); zy=Math.min(100-zh,Math.max(0,oy+dy)); }
-    else{ zw=Math.min(100-zx,Math.max(10,ow+dx)); zh=Math.min(100-zy,Math.max(8,oh+dy)); }
-    applyZone(); e.preventDefault();
+    if(mode==='move'){ centerTo(p.x,p.y); }
+    else{
+      const dx=(p.x-sx)/r.width*100, dy=(p.y-sy)/r.height*100;
+      zw=Math.min(100-zx,Math.max(8,ow+dx)); zh=Math.min(100-zy,Math.max(8,oh+dy)); applyZone();
+    }
+    e.preventDefault();
   }
-  function up(){mode=null;}
-  zone.addEventListener('mousedown',down); zone.addEventListener('touchstart',down,{passive:false});
+  const up=()=>mode=null;
+  hud.addEventListener('mousedown',down); hud.addEventListener('touchstart',down,{passive:false});
   window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
   window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
 })();
 
-/* 偵測演算法：橘色球「由上往下」穿過偵測框 → 記一次進球
-   狀態機：等待 → 球進框(上半) → 球到框下半 → 離開 → 觸發 make（含冷卻） */
-let sens=8, phase='idle', cooldown=0;
-$('#sens').oninput=e=>sens=+e.target.value;
-function detectLoop(){
-  rafId=requestAnimationFrame(detectLoop);
-  if(!running||video.readyState<2)return;
-  const W=work.width,H=work.height;
-  wctx.drawImage(video,0,0,W,H);
-  // 偵測框映射到縮小畫布
-  const x0=Math.floor(zx/100*W), y0=Math.floor(zy/100*H);
-  const x1=Math.ceil((zx+zw)/100*W), y1=Math.ceil((zy+zh)/100*H);
-  let img; try{img=wctx.getImageData(x0,y0,x1-x0,y1-y0);}catch(e){return;}
-  const d=img.data, zW=x1-x0, zH=y1-y0;
-  let count=0, sumY=0;
-  for(let py=0;py<zH;py++){
-    for(let px=0;px<zW;px++){
-      const i=(py*zW+px)*4, r=d[i],g=d[i+1],b=d[i+2];
-      // 籃球橘：R 明顯大於 B，R>=G>=B，且夠亮
-      if(r>110 && r-b>45 && r>=g && g>=b-10 && r+g+b>140){ count++; sumY+=py; }
-    }
-  }
-  const area=zW*zH;
-  const thresh=area*(sens/1000)+4;        // 靈敏度：需要多少橘色像素才算「有球」
-  const present=count>thresh;
-  const cy=count?sumY/count:0;            // 橘色重心在框內的相對高度
-  if(cooldown>0)cooldown--;
+/* 主迴圈：畫（含數位放大的）畫面 → 偵測框內做「畫面變化量」偵測 */
+let prevData=null, prevKey='', wasOver=false, cooldown=0;
+function loop(){
+  rafId=requestAnimationFrame(loop);
+  if(!running||video.readyState<2||!vw)return;
 
-  if(phase==='idle'){ if(present && cy<zH*0.55) phase='enter'; }
-  else if(phase==='enter'){
-    if(!present){ phase='idle'; }             // 球又不見了，重來
-    else if(cy>zH*0.55) phase='through';      // 球移動到框下半 → 判定穿過
-  }
-  else if(phase==='through'){
-    if(!present){                             // 球離開框下緣 → 進球！
-      if(cooldown===0){ addMake(true); cooldown=45; } // ~0.75s 冷卻防重複
-      phase='idle';
+  // 以「cover」方式把 3:4 的來源區塊畫進 360×480；zoom 縮小來源區塊 = 放大畫面
+  let bw,bh;
+  if(vw/vh>0.75){ bh=vh; bw=bh*0.75; } else { bw=vw; bh=bw/0.75; }
+  const cw=bw/zoom, ch=bh/zoom, cx=(vw-cw)/2, cy=(vh-ch)/2;
+  vctx.drawImage(video, cx,cy,cw,ch, 0,0,VW,VH);
+
+  // 偵測框對應到畫布像素
+  const x0=Math.round(zx/100*VW), y0=Math.round(zy/100*VH);
+  const w=Math.max(1,Math.round(zw/100*VW)), h=Math.max(1,Math.round(zh/100*VH));
+  let cur; try{ cur=vctx.getImageData(x0,y0,w,h); }catch(e){ return; }
+  const key=w+'x'+h;
+
+  let motion=0;
+  if(prevData && prevKey===key){
+    const a=cur.data, b=prevData.data; let changed=0; const n=a.length;
+    for(let i=0;i<n;i+=4){
+      const d=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
+      if(d>60) changed++;
     }
+    motion=changed/(n/4);              // 0..1：框內有多少比例的像素在動
   }
+  prevData=cur; prevKey=key;
+
+  // 靈敏度 → 門檻（右邊=高靈敏=低門檻）
+  const thr=0.30-(sens-1)*(0.28/19);   // sens1≈0.30, sens20≈0.02
+  const scale=0.45;                     // 顯示縮放
+  $('#meterFill').style.width=Math.min(100,motion/scale*100)+'%';
+  $('#meterThr').style.left=Math.min(100,thr/scale*100)+'%';
+
+  if(cooldown>0)cooldown--;
+  const over=motion>thr;
+  if(over && !wasOver && cooldown===0){ addMake(true); cooldown=25; } // 上升沿觸發＋冷卻
+  wasOver=over;
 }
 
 /* ---------- 開始 / 結束 ---------- */
 $('#startBtn').onclick=()=>{
   ballsPerSet=Math.max(1,+$('#ballsPerSet').value||10);
-  made=0; streak=0; streakMax=0; running=true; phase='idle'; cooldown=0;
+  made=0; streak=0; streakMax=0; running=true; wasOver=false; cooldown=0; prevData=null;
   $('#setup').style.display='none'; $('#live').style.display='block';
   refreshLive(); startCamera();
 };
 function endSession(store){
   running=false; stopCamera();
-  if(store && made>=0){
+  if(store){
     const s=load();
-    s.push({t:Date.now(), date:new Date().toISOString().slice(0,10),
-      dist, made, total:ballsPerSet, streak:streakMax});
+    s.push({t:Date.now(), date:new Date().toISOString().slice(0,10), dist, made, total:ballsPerSet, streak:streakMax});
     save(s); toast('已存檔 ✅');
   }
   $('#live').style.display='none'; $('#setup').style.display='block';
@@ -363,16 +395,13 @@ $('#cancelBtn').onclick=()=>{ if(confirm('取消這一組？不會存檔。'))en
 
 /* ---------- 統計 ---------- */
 function renderStats(){
-  const s=load();
-  let m=0,t=0,best=0;
-  const byDist={};
+  const s=load(); let m=0,t=0,best=0; const byDist={};
   s.forEach(x=>{ m+=x.made; t+=x.total; best=Math.max(best,x.streak||0);
     const k=x.dist||'未分類'; byDist[k]=byDist[k]||{m:0,t:0}; byDist[k].m+=x.made; byDist[k].t+=x.total; });
   $('#allPct').textContent=t?Math.round(m/t*100)+'%':'–';
   $('#allFrac').textContent=t?`${m} / ${t}`:'';
   $('#allSets').textContent=s.length; $('#allBest').textContent=best; $('#allShots').textContent=t;
-  const tb=$('#distTable tbody'); tb.innerHTML='';
-  const order=['罰球線','中距離','三分線'];
+  const tb=$('#distTable tbody'); tb.innerHTML=''; const order=['罰球線','中距離','三分線'];
   Object.keys(byDist).sort((a,b)=>order.indexOf(a)-order.indexOf(b)).forEach(k=>{
     const {m,t}=byDist[k]; const p=t?Math.round(m/t*100):0;
     tb.innerHTML+=`<tr><td style="text-align:left"><span class="chip">${k}</span></td><td>${m}/${t}</td><td><b>${p}%</b></td></tr>`;
@@ -388,10 +417,10 @@ function renderTrend(s){
   const W=460,H=150,pad=26;
   const pts=days.map((d,i)=>{ const p=byDay[d].t?byDay[d].m/byDay[d].t:0;
     return{x:pad+i*((W-pad*2)/Math.max(1,days.length-1)), y:H-20-p*(H-40), p:Math.round(p*100), d}; });
-  let path=pts.map((q,i)=>(i?'L':'M')+q.x.toFixed(1)+' '+q.y.toFixed(1)).join(' ');
-  let dots=pts.map(q=>`<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="3.5" fill="#ff7a2f"/>
+  const path=pts.map((q,i)=>(i?'L':'M')+q.x.toFixed(1)+' '+q.y.toFixed(1)).join(' ');
+  const dots=pts.map(q=>`<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="3.5" fill="#ff7a2f"/>
     <text x="${q.x.toFixed(1)}" y="${(q.y-8).toFixed(1)}" text-anchor="middle" fill="#ffb066">${q.p}</text>`).join('');
-  let xlab=pts.map((q,i)=> (days.length<=8||i%2===0)?`<text x="${q.x.toFixed(1)}" y="${H-4}" text-anchor="middle">${q.d.slice(5)}</text>`:'').join('');
+  const xlab=pts.map((q,i)=>(days.length<=8||i%2===0)?`<text x="${q.x.toFixed(1)}" y="${H-4}" text-anchor="middle">${q.d.slice(5)}</text>`:'').join('');
   box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%">
     <line x1="${pad}" y1="${H-20}" x2="${W-pad}" y2="${H-20}" stroke="#243052"/>
     <path d="${path}" fill="none" stroke="#ff7a2f" stroke-width="2.5" stroke-linejoin="round"/>

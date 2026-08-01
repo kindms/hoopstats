@@ -85,9 +85,11 @@
   .ov-streak b{font-size:22px; display:block; line-height:1}
   .ov-streak span{font-size:11px; color:#cbd5f5}
   .ov-tag{left:10px; bottom:76px; padding:5px 10px; font-size:12px; color:#dfe6ff}
-  .ov-counter{left:0; right:0; bottom:12px; display:flex; justify-content:center; align-items:center; gap:18px; background:none}
-  .ov-counter button{width:56px;height:56px;border-radius:50%; font-size:26px; padding:0; box-shadow:0 4px 14px #0008}
-  .ov-counter .num{font-size:30px; font-weight:800; min-width:64px; text-align:center; background:#000b; border-radius:12px; padding:6px 0}
+  .ov-counter{left:0; right:0; bottom:12px; display:flex; justify-content:center; align-items:center; gap:12px; background:none}
+  .ov-counter button{border-radius:14px; box-shadow:0 4px 14px #0008; padding:14px 22px; font-size:17px}
+  .ov-counter .miss{background:var(--bad)}
+  .ov-counter .make{background:var(--good)}
+  .ov-counter .undo{background:#000c; border:1px solid #ffffff55; padding:12px 12px; font-size:13px; font-weight:700}
 
   /* 底部控制列（固定，不捲動） */
   .pctrls{padding:10px 12px calc(10px + env(safe-area-inset-bottom)); background:#0c1224; border-top:1px solid var(--line)}
@@ -142,8 +144,8 @@
         <button data-d="三分線">三分線</button>
       </div>
       <div style="margin-top:12px">
-        <label>這組投幾球</label>
-        <input type="number" id="ballsPerSet" value="10" min="1" max="200">
+        <label>目標球數（想投幾球，只是進度目標，不是上限）</label>
+        <input type="number" id="ballsPerSet" value="10" min="1" max="500">
       </div>
       <div class="toggle">
         <div class="t-txt">進球特效<small>進球時閃綠光＋手機震動</small></div>
@@ -205,13 +207,13 @@
     <div class="hud" id="hud">
       <div id="zone"><span class="cross"></span><span class="handle"></span></div>
     </div>
-    <div class="ov ov-stats"><div class="p" id="pPct">0%</div><div class="f" id="pFrac">0 / 0</div></div>
+    <div class="ov ov-stats"><div class="p" id="pPct">0%</div><div class="f" id="pFrac">進 0 / 投 0</div><div class="f" id="pGoal">目標 10</div></div>
     <div class="ov ov-streak"><b id="pStreak">0</b><span>連中</span></div>
     <div class="ov ov-tag" id="tag">點畫面移動框 · 綠圈=偵測到球</div>
     <div class="ov-counter">
-      <button class="bad" id="minus">−</button>
-      <div class="num" id="madeNum">0</div>
-      <button class="good" id="plus">＋</button>
+      <button class="miss" id="missBtn">✗ 沒進</button>
+      <button class="undo" id="undoBtn">↶ 退回</button>
+      <button class="make" id="makeBtn">✓ 進球</button>
     </div>
     <div class="flash" id="flash"></div>
   </div>
@@ -269,25 +271,39 @@ $('#fxToggle').checked=fx;
 $('#fxToggle').onchange=e=>{fx=e.target.checked; localStorage.setItem('hoopstats.fx',fx?'1':'0');};
 
 /* ---------- 練習狀態 ---------- */
-let ballsPerSet=10, made=0, streak=0, streakMax=0, running=false;
+let ballsPerSet=10, made=0, missed=0, streak=0, streakMax=0, running=false, shots=[];
 function refreshLive(){
-  const total=ballsPerSet, pct=total?Math.round(made/total*100):0;
+  const attempts=made+missed, pct=attempts?Math.round(made/attempts*100):0;
   $('#pPct').textContent=pct+'%';
-  $('#pFrac').textContent=made+' / '+total;
-  $('#madeNum').textContent=made;
+  $('#pFrac').textContent='進 '+made+' / 投 '+attempts;
+  $('#pGoal').textContent='目標 '+ballsPerSet+'（已投 '+attempts+'）';
   $('#pStreak').textContent=streak;
 }
+function checkGoal(){ if(made+missed===ballsPerSet)toast('達到目標 '+ballsPerSet+' 球！可結束存檔，也可繼續投 ✅'); }
 function addMake(auto){
   if(!running)return;
-  made++; streak++; streakMax=Math.max(streakMax,streak); refreshLive();
+  made++; shots.push('make'); streak++; streakMax=Math.max(streakMax,streak); refreshLive();
   if(fx){
     const f=$('#flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
     if(navigator.vibrate)navigator.vibrate(auto?[30,20,30]:20);
   }
-  if(made>=ballsPerSet)toast('這組投滿了！可以結束存檔 ✅');
+  checkGoal();
 }
-$('#plus').onclick=()=>addMake(false);
-$('#minus').onclick=()=>{if(made>0){made--; streak=0; refreshLive();}};
+function addMiss(){
+  if(!running)return;
+  missed++; shots.push('miss'); streak=0; refreshLive();
+  if(navigator.vibrate)navigator.vibrate(12);
+  checkGoal();
+}
+function undoShot(){
+  const last=shots.pop(); if(!last)return;
+  if(last==='make')made=Math.max(0,made-1); else missed=Math.max(0,missed-1);
+  streak=0; for(let i=shots.length-1;i>=0 && shots[i]==='make';i--)streak++; // 重算目前連中
+  refreshLive();
+}
+$('#makeBtn').onclick=()=>addMake(false);
+$('#missBtn').onclick=()=>addMiss();
+$('#undoBtn').onclick=undoShot;
 
 /* ---------- 相機 ---------- */
 let stream=null, rafId=null, vw=0, vh=0;
@@ -336,7 +352,7 @@ async function startCamera(){
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
     video.srcObject=stream; await video.play();
     vw=video.videoWidth; vh=video.videoHeight; sizeCanvas();
-    ballY=null; armed=0; cooldown=0; loop();
+    ballY=null; armed=0; cooldown=0; prevGlobal=null; shakeHold=0; loop();
   }catch(e){
     toast('⚠️ 無法開啟鏡頭，改用 ＋/− 手動計分');
     $('#tag').textContent='沒有鏡頭：用下方 ＋/− 手動計分';
@@ -378,8 +394,10 @@ applyZone();
   window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
 })();
 
-/* 主迴圈：追蹤球，球由上往下穿過籃框才算進 */
-let cooldown=0, armed=0, ballY=null;
+/* 主迴圈：追蹤球，球由上往下穿過籃框才算進
+   防誤判：①整體畫面劇烈變化(晃手機)→暫停計分 ②只認球大小且集中的物體
+   ③要求真的由上往下、有速度地掉進框 */
+let cooldown=0, armed=0, ballY=null, prevGlobal=null, shakeHold=0;
 function loop(){
   rafId=requestAnimationFrame(loop);
   if(!running||video.readyState<2||!vw)return;
@@ -391,36 +409,58 @@ function loop(){
   vctx.drawImage(video, cx,cy,cw,ch, 0,0,VW,VH);
 
   let img; try{ img=vctx.getImageData(0,0,VW,VH); }catch(e){ return; }
-  const d=img.data; let sx=0,sy=0,cnt=0;
+  const d=img.data;
+
+  // ── 整體晃動偵測：稀疏取樣全畫面亮度，和上一格比 ──
+  const gSample=[];
+  for(let y=0;y<VH;y+=12){ const row=y*VW; for(let x=0;x<VW;x+=12){ const i=(row+x)*4; gSample.push(d[i]+d[i+1]+d[i+2]); } }
+  let shaking=false;
+  if(prevGlobal && prevGlobal.length===gSample.length){
+    let ch=0; for(let k=0;k<gSample.length;k++) if(Math.abs(gSample[k]-prevGlobal[k])>90) ch++;
+    shaking = ch/gSample.length > 0.22;      // >22% 取樣點劇變 = 手機在晃
+  }
+  prevGlobal=gSample;
+  if(shaking) shakeHold=10; else if(shakeHold>0) shakeHold--;   // 晃動後多壓幾格
+
+  // ── 掃描球（含分佈變異數，用來判斷是否夠「集中」）──
+  let sx=0,sy=0,sxx=0,syy=0,cnt=0;
   for(let y=0;y<VH;y+=2){
     const row=y*VW;
     for(let x=0;x<VW;x+=2){
       const i=(row+x)*4;
-      if(isBall(d[i],d[i+1],d[i+2])){ sx+=x; sy+=y; cnt++; }
+      if(isBall(d[i],d[i+1],d[i+2])){ sx+=x; sy+=y; sxx+=x*x; syy+=y*y; cnt++; }
     }
   }
+  const sampledArea=Math.ceil(VW/2)*Math.ceil(VH/2);
   const minCount=Math.max(3,Math.round((21-sens)*4));
-  const present=cnt>=minCount;
-  const bx=present?sx/cnt:0, by=present?sy/cnt:0;
+  const maxCount=sampledArea*0.20;             // 太大片 = 背景同色，不是球
+  const bx=cnt?sx/cnt:0, by=cnt?sy/cnt:0;
+  let spread=999;
+  if(cnt){ const vX=sxx/cnt-bx*bx, vY=syy/cnt-by*by; spread=Math.sqrt(Math.max(0,vX+vY)); }
+  const maxSpread=VW*0.16;                      // 太分散 = 不是一顆球
+  const present = cnt>=minCount && cnt<=maxCount && spread<=maxSpread;
 
   $('#meterFill').style.width=Math.min(100, cnt/(minCount*2)*100)+'%';
 
   const rx0=zx/100*VW, ry0=zy/100*VH, rx1=(zx+zw)/100*VW, ry1=(zy+zh)/100*VH;
-  const mX=(rx1-rx0)*0.6;
+  const mX=(rx1-rx0)*0.6, rimH=ry1-ry0;
 
   if(cooldown>0)cooldown--;
-  if(present){
+  if(shakeHold>0){ armed=0; ballY=present?by:null; }   // 晃動中：解除武裝、不計分
+  else if(present){
     const vy=(ballY!=null)?(by-ballY):0;
-    const aboveRim=by<ry0 && bx>rx0-mX && bx<rx1+mX;
-    const inRim=bx>=rx0 && bx<=rx1 && by>=ry0 && by<=ry1;
-    if(aboveRim) armed=18;
-    if(armed>0 && inRim && vy>0 && cooldown===0){ addMake(true); cooldown=30; armed=0; }
+    const aboveRim = by < ry0-rimH*0.2 && bx>rx0-mX && bx<rx1+mX;  // 明顯在框上方
+    const inRim = bx>=rx0 && bx<=rx1 && by>=ry0 && by<=ry1;
+    if(aboveRim) armed=16;
+    if(armed>0 && inRim && vy>VH*0.008 && cooldown===0){ addMake(true); cooldown=30; armed=0; } // 有向下速度才算
     ballY=by;
   }else ballY=null;
   if(armed>0)armed--;
 
+  // 提示 + 畫出偵測到的球
+  if(!sampling) $('#tag').textContent = shakeHold>0 ? '📴 手機晃動中，暫停偵測' : '點畫面移動框 · 綠圈=偵測到球';
   vctx.beginPath();
-  if(present){
+  if(present && shakeHold===0){
     vctx.arc(bx,by, Math.max(6,Math.sqrt(cnt)*1.4), 0, 7);
     vctx.lineWidth=3; vctx.strokeStyle=armed>0?'#37d67a':'#ff7a2f'; vctx.stroke();
   }
@@ -429,7 +469,7 @@ function loop(){
 /* ---------- 開始 / 結束 ---------- */
 $('#startBtn').onclick=()=>{
   ballsPerSet=Math.max(1,+$('#ballsPerSet').value||10);
-  made=0; streak=0; streakMax=0; running=true; armed=0; cooldown=0; ballY=null;
+  made=0; missed=0; shots=[]; streak=0; streakMax=0; running=true; armed=0; cooldown=0; ballY=null;
   $('#pDist').textContent=dist;
   document.body.classList.add('practicing');
   $('#live').classList.add('on');
@@ -437,10 +477,14 @@ $('#startBtn').onclick=()=>{
 };
 function endSession(store){
   running=false; stopCamera();
+  const attempts=made+missed;
   if(store){
-    const s=load();
-    s.push({t:Date.now(), date:new Date().toISOString().slice(0,10), dist, made, total:ballsPerSet, streak:streakMax});
-    save(s); toast('已存檔 ✅');
+    if(attempts===0){ toast('這組沒有投球，未存檔'); }
+    else{
+      const s=load();
+      s.push({t:Date.now(), date:new Date().toISOString().slice(0,10), dist, made, total:attempts, streak:streakMax});
+      save(s); toast('已存檔 ✅');
+    }
   }
   $('#live').classList.remove('on');
   document.body.classList.remove('practicing');
